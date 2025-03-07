@@ -1,0 +1,66 @@
+trigger:
+  branches:
+    include:
+      - main  # or master, depending on your default branch
+
+pool:
+  vmImage: 'windows-latest'  # Use the appropriate agent image for your platform
+
+variables:
+  solution: '**/*.sln'  # If you have multiple solutions, use this pattern
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+  codeAntServer: '<CodeAnt-server-url>'  # The URL of your CodeAnt server (e.g., https://codeant.example.com)
+  codeAntToken: $(CODEANT_API_TOKEN)  # The API token or credentials for authenticating with CodeAnt
+  projectKey: '<your-project-key>'  # Your CodeAnt project key
+
+jobs:
+  - job: BuildAndAnalyze
+    displayName: 'Build and Analyze with CodeAnt'
+    steps:
+
+      # Step 1: Checkout the code from the repository
+      - task: Checkout@1
+        displayName: 'Checkout Repository'
+
+      # Step 2: Set up .NET SDK (if you're using .NET)
+      - task: UseDotNet@2
+        displayName: 'Install .NET SDK'
+        inputs:
+          packageType: 'sdk'
+          version: '8.x'  # .NET 8 SDK, adjust based on your project
+          installationPath: $(Agent.ToolsDirectory)/dotnet
+
+      # Step 3: Build the .NET solution
+      - task: DotNetCoreCLI@2
+        displayName: 'Build .NET Project'
+        inputs:
+          command: 'build'
+          projects: $(solution)
+          arguments: '--configuration $(buildConfiguration)'
+
+      # Step 4: Run CodeAnt Static Code Analysis
+      - task: CodeAnt@1
+        displayName: 'Run CodeAnt Analysis'
+        inputs:
+          serverUrl: $(codeAntServer)  # The URL of your CodeAnt server
+          token: $(codeAntToken)  # The API token or credentials for authentication
+          projectKey: $(projectKey)  # Your CodeAnt project key
+          filesToAnalyze: $(solution)  # Files to be analyzed
+          additionalArgs: '--strict'  # Optional additional arguments for analysis (e.g., '--strict' for stricter analysis)
+
+      # Step 5: Run Unit Tests (optional)
+      - task: DotNetCoreCLI@2
+        displayName: 'Run Tests'
+        inputs:
+          command: 'test'
+          projects: $(solution)
+          arguments: '--configuration $(buildConfiguration)'
+
+      # Step 6: Publish build artifacts (optional)
+      - task: PublishBuildArtifacts@1
+        displayName: 'Publish Artifacts'
+        inputs:
+          PathtoPublish: $(Build.ArtifactStagingDirectory)
+          ArtifactName: 'drop'
+          publishLocation: 'Container'
