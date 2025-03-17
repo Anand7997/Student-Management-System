@@ -1,34 +1,67 @@
-# ASP.NET
-# Build and test ASP.NET projects.
-# Add steps that publish symbols, save build artifacts, deploy, and more:
-# https://docs.microsoft.com/azure/devops/pipelines/apps/aspnet/build-aspnet-4
-
 trigger:
-- main
+  branches:
+    include:
+      - main  # or master, depending on your default branch
 
 pool:
-  vmImage: 'windows-latest'
+  vmImage: 'windows-latest'  # Use the appropriate agent image for your platform
 
 variables:
-  solution: '**/*.sln'
+  solution: '**/*.sln'  # If you have multiple solutions, use this pattern
   buildPlatform: 'Any CPU'
   buildConfiguration: 'Release'
+  codeAntServer: 'https://app.codeant.ai/'  # The URL of your CodeAnt server (e.g., https://codeant.example.com)
+  codeAntToken: $(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)  # The API token or credentials for authenticating with CodeAnt
+  projectKey: 'gvtdtxzxdezetfrdg'  # Your CodeAnt project key
 
-steps:
-- task: NuGetToolInstaller@1
+jobs:
+  - job: BuildAndAnalyze
+    displayName: 'Build and Analyze with CodeAnt'
+    steps:
 
-- task: NuGetCommand@2
-  inputs:
-    restoreSolution: '$(solution)'
+      # Step 1: Checkout the code from the repository
+      - task: Checkout@1
+        displayName: 'Checkout Repository'
 
-- task: VSBuild@1
-  inputs:
-    solution: '$(solution)'
-    msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:PackageLocation="$(build.artifactStagingDirectory)"'
-    platform: '$(buildPlatform)'
-    configuration: '$(buildConfiguration)'
+      # Step 2: Set up .NET SDK (if you're using .NET)
+      - task: UseDotNet@2
+        displayName: 'Install .NET SDK'
+        inputs:
+          packageType: 'sdk'
+          version: '8.x'  # .NET 8 SDK, adjust based on your project
+          installationPath: $(Agent.ToolsDirectory)/dotnet
 
-- task: VSTest@2
-  inputs:
-    platform: '$(buildPlatform)'
-    configuration: '$(buildConfiguration)'
+      # Step 3: Build the .NET solution
+      - task: DotNetCoreCLI@2
+        displayName: 'Build .NET Project'
+        inputs:
+          command: 'build'
+          projects: $(solution)
+          arguments: '--configuration $(buildConfiguration)'
+
+      # Step 4: Run CodeAnt Static Code Analysis
+      - task: CodeAnt@1
+        displayName: 'Run CodeAnt Analysis'
+        inputs:
+          serverUrl: $(codeAntServer)  # The URL of your CodeAnt server
+          token: $(codeAntToken)  # The API token or credentials for authentication
+          projectKey: $(projectKey)  # Your CodeAnt project key
+          filesToAnalyze: $(solution)  # Files to be analyzed
+          additionalArgs: '--strict'  # Optional additional arguments for analysis (e.g., '--strict' for stricter analysis)
+
+      # Step 5: Run Unit Tests (optional)
+      - task: DotNetCoreCLI@2
+        displayName: 'Run Tests'
+        inputs:
+          command: 'test'
+          projects: $(solution)
+          arguments: '--configuration $(buildConfiguration)'
+
+      # Step 6: Publish build artifacts (optional)
+      - task: PublishBuildArtifacts@1
+        displayName: 'Publish Artifacts'
+        inputs:
+          PathtoPublish: $(Build.ArtifactStagingDirectory)
+          ArtifactName: 'drop'
+          publishLocation: 'Container'
+
